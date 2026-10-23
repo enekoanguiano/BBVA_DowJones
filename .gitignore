@@ -5,6 +5,7 @@
 *.jpg
 *.txt
 *.pkl
+*.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
