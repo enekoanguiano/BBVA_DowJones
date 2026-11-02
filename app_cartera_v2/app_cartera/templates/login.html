@@ -18,8 +18,8 @@
 
   <section class="login-form">
     <form method="post" autocomplete="off" novalidate>
-      <h2>Acceso de administradores</h2>
-      <p class="hint">Entra con tu usuario de administrador para usar el simulador.</p>
+      <h2>Acceso</h2>
+      <p class="hint">Entra con el usuario que te ha dado el administrador.</p>
       {% if error %}<div class="aviso-error" role="alert">{{ error }}</div>{% endif %}
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <label for="usuario">Usuario</label>

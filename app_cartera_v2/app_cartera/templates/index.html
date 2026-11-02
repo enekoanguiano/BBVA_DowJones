@@ -54,12 +54,17 @@
     </div>
 
     <div class="rail-pie">
+      {% for msg in get_flashed_messages() %}<div class="rail-aviso" role="status">{{ msg }}</div>{% endfor %}
       <button class="btn-simular" id="btn-simular">Simular carteras</button>
       <div id="error" class="rail-error" role="alert"></div>
       <form method="post" action="{{ url_for('logout') }}" class="sesion">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-        <span>Sesión de <b>{{ admin_actual }}</b></span>
-        <button type="submit" class="rail-link">Cerrar sesión</button>
+        <span>Sesión de <b>{{ usuario_actual }}</b></span>
+        <span class="sesion-acciones">
+          {% if es_admin %}<a class="rail-link" href="{{ url_for('panel.resumen') }}">Administración</a>{% endif %}
+          <a class="rail-link" href="{{ url_for('cuenta_clave') }}">Contraseña</a>
+          <button type="submit" class="rail-link">Salir</button>
+        </span>
       </form>
     </div>
   </aside>

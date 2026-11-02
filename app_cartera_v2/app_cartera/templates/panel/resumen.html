@@ -1,0 +1,47 @@
+{% extends "panel/base.html" %}
+{% from "panel/_macros.html" import tabla_conexiones with context %}
+{% block titulo %}Resumen{% endblock %}
+{% block contenido %}
+<h1>Resumen de seguridad</h1>
+<p class="hint">Actividad de acceso y uso de la aplicación. Horas en la zona horaria del servidor.</p>
+
+{% if sospechosas %}
+<div class="avisos"><div class="aviso alerta">
+  <b>Posible intento de fuerza bruta.</b> IPs con 5 o más accesos fallidos en las últimas 24 h:
+  {% for s in sospechosas %}<a href="{{ url_for('panel.conexiones', ip=s.ip) }}">{{ s.ip }}</a> ({{ s.fallos }} fallos, {{ s.usuarios }} usuario{{ 's' if s.usuarios != 1 }}){{ ', ' if not loop.last }}{% endfor %}
+</div></div>
+{% endif %}
+
+<div class="cifras">
+  <div class="cifra"><a href="{{ url_for('panel.sesiones') }}"><div class="etiqueta">Conectados ahora</div><div class="grande">{{ r.conectados }}</div></a></div>
+  <div class="cifra"><a href="{{ url_for('panel.conexiones', resultado='ok') }}"><div class="etiqueta">Accesos en 24 h</div><div class="grande">{{ r.accesos_24h }}</div></a></div>
+  <div class="cifra {{ 'malo' if r.fallos_24h }}"><a href="{{ url_for('panel.conexiones', resultado='fallo') }}"><div class="etiqueta">Intentos fallidos en 24 h</div><div class="grande">{{ r.fallos_24h }}</div></a></div>
+  <div class="cifra {{ 'malo' if r.bloqueados }}"><a href="{{ url_for('panel.usuarios') }}"><div class="etiqueta">Cuentas bloqueadas</div><div class="grande">{{ r.bloqueados }}</div></a></div>
+  <div class="cifra"><a href="{{ url_for('panel.usuarios') }}"><div class="etiqueta">Usuarios activos</div><div class="grande">{{ r.usuarios }}</div></a></div>
+  <div class="cifra"><a href="{{ url_for('panel.auditoria') }}"><div class="etiqueta">Cálculos en 24 h</div><div class="grande">{{ r.simulaciones_24h }}</div></a></div>
+</div>
+
+<div class="bloque">
+  <div class="bloque-cab"><h3>Accesos de los últimos 14 días</h3>
+    <div class="leyenda"><span><i style="background:var(--series-1)"></i>Correctos</span><span><i style="background:var(--critical)"></i>Fallidos</span></div>
+  </div>
+  {% if dias %}
+  <div class="barras-dia">
+    {% for d in dias %}
+    <div class="dia" title="{{ d.dia }}: {{ d.ok }} correctos, {{ d.fallos }} fallidos">
+      <div class="pila">
+        <i class="ok" style="height: {{ (d.ok / maximo * 100) | round(1) }}%"></i>
+        <i class="ko" style="height: {{ (d.fallos / maximo * 100) | round(1) }}%"></i>
+      </div>
+      <span class="etq">{{ d.dia[8:10] }}/{{ d.dia[5:7] }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="hint">Todavía no hay accesos registrados.</p>{% endif %}
+</div>
+
+<div class="bloque">
+  <div class="bloque-cab"><h3>Últimas conexiones</h3><a class="hint" href="{{ url_for('panel.conexiones') }}">Ver todas</a></div>
+  {{ tabla_conexiones(ultimas) }}
+</div>
+{% endblock %}

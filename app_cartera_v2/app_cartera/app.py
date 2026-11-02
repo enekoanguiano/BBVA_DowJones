@@ -10,9 +10,10 @@ Ejecutar:  python app.py      ->  http://127.0.0.1:5000
 import os
 
 import numpy as np
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from motor.auth import Admins, clave_secreta, csrf_valido, iniciar_sesion, proteger, token_csrf
+from motor.auth import (ROLES, Seguridad, a_hora_local, auditar, clave_secreta, csrf_valido,
+                        iniciar_sesion, ip_cliente, navegador, problemas_clave, proteger, token_csrf)
 from motor.datos import cargar_precios
 from motor.opcion import valorar
 from motor.redes import GestorRedes
@@ -32,8 +33,18 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SEGURA") == "1",  # actívalo si sirves por HTTPS
 )
-ADMINS = Admins(os.environ.get("ADMINS_PATH", os.path.join(BASE, "admins.json")))
-proteger(app)
+if os.environ.get("DETRAS_DE_PROXY") == "1":
+    # Detrás de Nginx u otro proxy: registrar la IP real del usuario (cabecera X-Forwarded-For)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+SEG = Seguridad(os.environ.get("SEGURIDAD_DB", os.path.join(BASE, "instance", "seguridad.db")),
+                ruta_json_antiguo=os.path.join(BASE, "admins.json"))  # se importa una sola vez si existe
+proteger(app, SEG)
+app.add_template_filter(a_hora_local, "hora_local")
+
+from panel import bp as panel_bp  # noqa: E402
+
+app.register_blueprint(panel_bp)
 PRECIOS = cargar_precios(DATA_PATH)
 REDES = GestorRedes(MODELOS_DIR)
 
@@ -89,7 +100,9 @@ def _pesos(pesos, n):
 
 @app.context_processor
 def _plantillas():
-    return {"csrf_token": token_csrf, "admin_actual": session.get("admin")}
+    u = g.get("usuario")
+    return {"csrf_token": token_csrf, "usuario_actual": u["usuario"] if u else None,
+            "es_admin": bool(u and u["rol"] == "admin"), "ROLES": ROLES}
 
 
 @app.after_request
@@ -105,35 +118,63 @@ def _cabeceras(resp):
 # ------------------------------- Acceso ------------------------------------ #
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("admin"):
+    if SEG.sesion(session.get("sid")):
         return redirect(url_for("index"))
     error, usuario = None, ""
-    if not ADMINS.hay_admins():
+    if not SEG.hay_admins():
         error = ("Todavía no hay administradores. Crea uno en la terminal con: "
                  "python gestionar_admins.py crear <usuario>")
     elif request.method == "POST":
         usuario = (request.form.get("usuario") or "").strip().lower()
-        ip = request.remote_addr or "?"
-        espera = ADMINS.bloqueado(ip, usuario)
+        ip = ip_cliente()
+        espera = SEG.bloqueado(ip, usuario)
         if not csrf_valido(request.form.get("csrf")):
             error = "La sesión del formulario ha caducado. Inténtalo de nuevo."
         elif espera:
+            SEG.registrar_conexion(usuario[:40], ip, navegador(), False, "demasiados_intentos")
             error = f"Demasiados intentos fallidos. Espera {espera // 60 + 1} min y vuelve a probar."
-        elif ADMINS.verificar(ip, usuario, request.form.get("clave")):
+        elif SEG.autenticar(usuario, request.form.get("clave"), ip, navegador()):
             siguiente = request.args.get("siguiente", "")
-            iniciar_sesion(usuario)
+            iniciar_sesion(SEG, usuario)
             # solo redirecciones internas
             return redirect(siguiente if siguiente.startswith("/") and not siguiente.startswith("//")
                             else url_for("index"))
         else:
+            # mensaje genérico: no revela si el usuario existe, está desactivado o bloqueado
             error = "Usuario o contraseña incorrectos."
     return render_template("login.html", error=error, usuario=usuario), (401 if error and request.method == "POST" else 200)
 
 
 @app.post("/logout")
 def logout():
+    SEG.cerrar_sesion(session.get("sid"), "salida")
+    SEG.registrar_conexion(session.get("usuario"), ip_cliente(), navegador(), True, "salida")
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/cuenta/clave", methods=["GET", "POST"])
+def cuenta_clave():
+    u = g.usuario
+    error = None
+    if request.method == "POST":
+        actual, nueva = request.form.get("actual", ""), request.form.get("nueva", "")
+        reg = SEG.usuario(u["usuario"])
+        if not SEG.autenticar_clave(reg, actual):
+            error = "La contraseña actual no es correcta."
+        elif nueva != request.form.get("repetir", ""):
+            error = "Las dos contraseñas nuevas no coinciden."
+        elif nueva == actual:
+            error = "La nueva contraseña debe ser distinta de la actual."
+        elif falta := problemas_clave(nueva):
+            error = "La contraseña necesita " + ", ".join(falta) + "."
+        else:
+            SEG.cambiar_clave(u["usuario"], nueva)
+            SEG.cerrar_sesiones_de(u["usuario"], "cambio_clave", excepto=session.get("sid"))
+            auditar("cambio_clave_propia", u["usuario"])
+            flash("Contraseña actualizada. Se han cerrado tus otras sesiones abiertas.")
+            return redirect(url_for("index"))
+    return render_template("cuenta_clave.html", error=error, obligatoria=bool(u["debe_cambiar"]))
 
 
 @app.get("/")
@@ -190,6 +231,9 @@ def api_simular():
         res["periodo_calibracion"] = [cal["fecha_ini"].strftime("%Y-%m-%d"),
                                       cal["fecha_fin"].strftime("%Y-%m-%d")]
         salida.append(res)
+    auditar("simulacion", " | ".join(", ".join(f"{t} {p:.0%}" for t, p in zip(c["tickers"], c["pesos"]))
+                                     for c in salida),
+            f"capital={capital:g} horizonte={horizonte:g}a sims={n_sims} drift={drift} rebalanceo={rebalanceo}")
     return jsonify({"carteras": salida, "horizonte": horizonte, "drift": drift})
 
 
@@ -203,6 +247,7 @@ def api_frontera():
     cal = calibrar(PRECIOS, tks, anios_hist=anios)
     res = frontera(cal)
     res["tickers"] = tks
+    auditar("frontera", ", ".join(tks), f"anios_hist={anios:g}")
     return jsonify(res)
 
 
@@ -215,6 +260,7 @@ def api_opcion():
     anios = _num(d, "anios_hist", 5, 0.5, 50)
     n_sims = _num(d, "n_sims", 20_000, 1_000, MAX_SIMS, int)
     cal = calibrar(PRECIOS, tks, anios_hist=anios)
+    auditar("valoracion_opcion", ", ".join(tks), f"sims={n_sims} anios_hist={anios:g}")
     return jsonify(valorar(cal, REDES, n_sims=n_sims))
 
 
