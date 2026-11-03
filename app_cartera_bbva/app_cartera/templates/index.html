@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>Simulador de carteras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+</head>
+<body class="pagina-app">
+<div class="viz-root app">
+
+  <!-- ======================= PANEL LATERAL ======================= -->
+  <aside class="rail">
+    <div class="rail-cab">
+      <div class="logo" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div>
+        <div class="rail-titulo">Simulador de carteras</div>
+        <div class="rail-sub" id="info-datos">Cargando datos…</div>
+      </div>
+    </div>
+
+    <div class="rail-scroll">
+      <div class="rail-seccion">
+        <div class="rail-seccion-cab">
+          <h2>Carteras</h2>
+          <button class="rail-link" id="btn-ejemplo">Cargar ejemplo</button>
+        </div>
+        <div id="carteras"></div>
+        <button class="rail-anadir" id="btn-add-cartera">Añadir cartera</button>
+      </div>
+
+      <details class="rail-seccion" open>
+        <summary><h2>Parámetros</h2></summary>
+        <div class="campos">
+          <label>Capital inicial (€)<input type="number" id="capital" value="10000" min="1"></label>
+          <label>Horizonte (años)<input type="number" id="horizonte" value="5" min="0.25" max="30" step="0.25"></label>
+          <label>Simulaciones<input type="number" id="n_sims" value="10000" min="500" max="50000" step="500"></label>
+          <label>Años de histórico<input type="number" id="anios_hist" value="5" min="0.5" max="50" step="0.5"></label>
+        </div>
+        <label>Rentabilidad esperada
+          <select id="drift">
+            <option value="contraido">Prudente: media entre la histórica y el 1 %</option>
+            <option value="historico">Histórica: media de los retornos pasados</option>
+            <option value="neutral">Neutral al riesgo: 1 %, como el notebook</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="rebalanceo"> Rebalancear a los pesos en cada paso</label>
+      </details>
+    </div>
+
+    <div class="rail-pie">
+      {% for msg in get_flashed_messages() %}<div class="rail-aviso" role="status">{{ msg }}</div>{% endfor %}
+      <button class="btn-simular" id="btn-simular">Simular carteras</button>
+      <div id="error" class="rail-error" role="alert"></div>
+      <form method="post" action="{{ url_for('logout') }}" class="sesion">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <span>Sesión de <b>{{ usuario_actual }}</b></span>
+        <span class="sesion-acciones">
+          {% if es_admin %}<a class="rail-link" href="{{ url_for('panel.resumen') }}">Administración</a>{% endif %}
+          <a class="rail-link" href="{{ url_for('cuenta_clave') }}">Contraseña</a>
+          <button type="submit" class="rail-link">Salir</button>
+        </span>
+      </form>
+    </div>
+  </aside>
+
+  <!-- ========================= RESULTADOS ========================= -->
+  <main class="lienzo">
+    <nav class="tabs" role="tablist" aria-label="Secciones">
+      <button class="tab activa" data-tab="proyeccion" role="tab">Proyección</button>
+      <button class="tab" data-tab="activos" role="tab">Activos y riesgo</button>
+      <button class="tab" data-tab="historico" role="tab">Histórico</button>
+      <button class="tab" data-tab="frontera" role="tab">Combinaciones óptimas</button>
+      <button class="tab" data-tab="red" role="tab">Red neuronal</button>
+    </nav>
+
+    <section class="panel activo" id="tab-proyeccion">
+      <div id="vacio" class="vacio">
+        <h2>Compara cómo podrían evolucionar tus carteras</h2>
+        <p>Añade tickers y pesos en el panel de la izquierda y pulsa <b>Simular carteras</b>.
+           Si quieres verlo funcionando ya, usa <b>Cargar ejemplo</b>.</p>
+      </div>
+      <div id="resultado" hidden>
+        <div id="kpis" class="resumen"></div>
+        <div class="bloque">
+          <div class="bloque-cab"><h3>Valor de la cartera</h3><span class="hint">Línea: mediana · banda: del 5 % al 95 % de los escenarios</span></div>
+          <div id="g-fan" class="grafico alto"></div>
+        </div>
+        <div class="bloque"><div class="bloque-cab"><h3>Comparativa</h3></div><div id="tabla-comp" class="tabla-scroll"></div></div>
+        <div class="bloque"><div class="bloque-cab"><h3>Valor al final del horizonte</h3><span class="hint">Reparto de todos los escenarios simulados</span></div><div id="g-hist" class="grafico"></div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-activos">
+      <div class="barra"><label class="inline">Cartera <select id="sel-cartera-activos"></select></label></div>
+      <div class="bloque"><div class="bloque-cab"><h3>Previsión por activo</h3></div><div id="tabla-activos" class="tabla-scroll"></div></div>
+      <div class="dos">
+        <div class="bloque"><div class="bloque-cab"><h3>Peso frente a contribución al riesgo</h3></div><div id="g-riesgo" class="grafico"></div></div>
+        <div class="bloque"><div class="bloque-cab"><h3>Correlaciones</h3></div><div id="g-corr" class="grafico"></div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-historico">
+      <div class="barra"><label class="inline">Cartera <select id="sel-cartera-hist"></select></label></div>
+      <div class="bloque">
+        <div class="bloque-cab"><h3>Evolución real en el periodo de calibración</h3><span class="hint">Base 100, comprar y mantener</span></div>
+        <div id="g-historico" class="grafico alto"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-frontera">
+      <div class="barra">
+        <label class="inline">Cartera <select id="sel-cartera-front"></select></label>
+        <button class="btn-sec" id="btn-frontera">Buscar combinaciones</button>
+      </div>
+      <div class="bloque">
+        <div class="bloque-cab"><h3>Frontera eficiente</h3><span class="hint">Miles de repartos de pesos entre los mismos activos</span></div>
+        <div id="g-frontera" class="grafico alto"></div>
+      </div>
+      <div id="sugerencias" class="dos"></div>
+    </section>
+
+    <section class="panel" id="tab-red">
+      <div class="bloque">
+        <div class="bloque-cab"><h3>Call asiática sobre 3 activos</h3></div>
+        <p class="hint ancho">Es el payoff del notebook: <code>(Σ media geométrica(Sᵢ(t)/Sᵢ(0)) − 3)⁺</code>, con 20 pasos trimestrales, T = 5 años y r = 1 %.
+          La app simula trayectorias con la volatilidad y la correlación reales de los activos y compara la prima de Monte Carlo con la de RNN, GRU y LSTM.
+          Los pesos de la cartera no intervienen en este cálculo.</p>
+        <div class="barra">
+          <input type="text" id="red-tickers" placeholder="Tres tickers, p. ej. AAPL, MSFT, KO" aria-label="Tres tickers">
+          <button class="btn-sec" id="btn-red-usar">Usar la cartera 1</button>
+          <button class="btn-accion" id="btn-red">Valorar</button>
+        </div>
+        <div id="red-aviso" class="hint ancho"></div>
+      </div>
+      <div id="red-kpis" class="resumen"></div>
+      <div class="bloque" id="red-bloque-tabla" hidden><div id="red-tabla" class="tabla-scroll"></div></div>
+      <div class="bloque" id="red-bloque-graf" hidden>
+        <div class="bloque-cab"><h3>Payoff real frente a predicho</h3><span class="hint">Cuanto más cerca de la diagonal, mejor</span></div>
+        <div id="g-red" class="grafico alto"></div>
+      </div>
+    </section>
+
+    <footer class="hint">Proyecciones estadísticas basadas en datos históricos. No son una predicción segura ni una recomendación de inversión.</footer>
+  </main>
+</div>
+<datalist id="lista-tickers"></datalist>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
