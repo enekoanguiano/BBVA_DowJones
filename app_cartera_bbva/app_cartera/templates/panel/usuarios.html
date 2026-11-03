@@ -1,0 +1,46 @@
+{% extends "panel/base.html" %}
+{% block titulo %}Usuarios{% endblock %}
+{% block contenido %}
+<h1>Usuarios</h1>
+<p class="hint"><b>Administrador</b>: usa el simulador y gestiona este panel. <b>Analista</b>: solo usa el simulador.</p>
+
+<div class="bloque">
+  <div class="bloque-cab"><h3>Nuevo usuario</h3><span class="hint">Se genera una contraseña provisional que deberá cambiar al entrar</span></div>
+  <form method="post" class="form-linea">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>Usuario<input name="usuario" required pattern="[A-Za-z0-9._\-]{2,40}" placeholder="nombre.apellido"></label>
+    <label>Email<input name="email" type="email" placeholder="opcional"></label>
+    <label>Rol
+      <select name="rol">{% for clave, texto in ROLES.items() %}<option value="{{ clave }}" {{ 'selected' if clave == 'analista' }}>{{ texto }}</option>{% endfor %}</select>
+    </label>
+    <button class="btn-accion" type="submit">Crear usuario</button>
+  </form>
+</div>
+
+<div class="bloque">
+<div class="tabla-scroll">
+<table class="tabla-panel">
+  <thead><tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Desde la IP</th><th>Creado</th></tr></thead>
+  <tbody>
+  {% for u in filas %}
+    <tr>
+      <td><a href="{{ url_for('panel.usuario', usuario=u.usuario) }}"><b>{{ u.usuario }}</b></a>
+        {% if u.usuario == usuario_actual %}<span class="etiqueta-estado e-neutro">tú</span>{% endif %}</td>
+      <td>{{ u.email or '—' }}</td>
+      <td><span class="etiqueta-estado e-rol">{{ ROLES.get(u.rol, u.rol) }}</span></td>
+      <td>
+        {% if not u.activo %}<span class="etiqueta-estado e-neutro">Desactivado</span>
+        {% elif u.bloqueado_hasta and u.bloqueado_hasta > ahora %}<span class="etiqueta-estado e-ko">Bloqueado</span>
+        {% elif u.debe_cambiar %}<span class="etiqueta-estado e-aviso">Clave provisional</span>
+        {% else %}<span class="etiqueta-estado e-ok">Activo</span>{% endif %}
+      </td>
+      <td>{{ u.ultimo_acceso | hora_local('%d/%m/%Y %H:%M') }}</td>
+      <td>{{ u.ultima_ip or '—' }}</td>
+      <td>{{ u.creado | hora_local('%d/%m/%Y') }}{% if u.creado_por %} <span class="hint">· {{ u.creado_por }}</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+{% endblock %}
