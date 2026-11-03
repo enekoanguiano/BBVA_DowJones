@@ -1,0 +1,96 @@
+{% extends "panel/base.html" %}
+{% from "panel/_macros.html" import tabla_conexiones with context %}
+{% block titulo %}{{ u.usuario }}{% endblock %}
+{% block contenido %}
+<p class="hint"><a href="{{ url_for('panel.usuarios') }}">« Usuarios</a></p>
+<h1>{{ u.usuario }}</h1>
+
+{% set bloqueado = u.bloqueado_hasta and u.bloqueado_hasta > ahora %}
+{% set es_yo = u.usuario == usuario_actual %}
+{% macro boton(accion, texto, clase='btn-sec', confirmar=None) -%}
+<form method="post" action="{{ url_for('panel.accion_usuario', usuario=u.usuario, accion=accion) }}" class="en-linea"
+      {% if confirmar %}onsubmit="return confirm('{{ confirmar }}')"{% endif %}>
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <button class="{{ clase }}" type="submit">{{ texto }}</button>
+</form>
+{%- endmacro %}
+
+<div class="bloque">
+  <dl class="ficha">
+    <dt>Rol</dt><dd><span class="etiqueta-estado e-rol">{{ ROLES.get(u.rol, u.rol) }}</span></dd>
+    <dt>Estado</dt><dd>
+      {% if not u.activo %}<span class="etiqueta-estado e-neutro">Desactivado</span>
+      {% elif bloqueado %}<span class="etiqueta-estado e-ko">Bloqueado hasta {{ u.bloqueado_hasta | hora_local('%H:%M') }}</span>
+      {% elif u.debe_cambiar %}<span class="etiqueta-estado e-aviso">Con contraseña provisional</span>
+      {% else %}<span class="etiqueta-estado e-ok">Activo</span>{% endif %}</dd>
+    <dt>Email</dt><dd>{{ u.email or '—' }}</dd>
+    <dt>Último acceso</dt><dd>{{ u.ultimo_acceso | hora_local }} {% if u.ultima_ip %}desde {{ u.ultima_ip }}{% endif %}</dd>
+    <dt>Contraseña cambiada</dt><dd>{{ u.clave_cambiada | hora_local('%d/%m/%Y') }}</dd>
+    <dt>Creado</dt><dd>{{ u.creado | hora_local('%d/%m/%Y') }}{% if u.creado_por %} por {{ u.creado_por }}{% endif %}</dd>
+  </dl>
+
+  <div class="acciones-usuario">
+    {% if not es_yo %}
+    <form method="post" action="{{ url_for('panel.accion_usuario', usuario=u.usuario, accion='rol') }}" class="form-linea">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <select name="rol" aria-label="Rol">{% for clave, texto in ROLES.items() %}<option value="{{ clave }}" {{ 'selected' if clave == u.rol }}>{{ texto }}</option>{% endfor %}</select>
+      <button class="btn-sec" type="submit">Cambiar rol</button>
+    </form>
+    {% endif %}
+    {% if bloqueado %}{{ boton('desbloquear', 'Desbloquear') }}{% endif %}
+    {{ boton('restablecer', 'Restablecer contraseña', confirmar='Se generará una contraseña provisional y se cerrarán sus sesiones. ¿Continuar?') }}
+    {% if not es_yo %}
+      {{ boton('cerrar_sesiones', 'Cerrar sus sesiones') }}
+      {% if u.activo %}{{ boton('desactivar', 'Desactivar', 'btn-peligro', 'No podrá entrar hasta que lo reactives. ¿Continuar?') }}
+      {% else %}{{ boton('activar', 'Activar') }}{% endif %}
+      {{ boton('borrar', 'Borrar', 'btn-peligro', 'Se borrará la cuenta (el historial se conserva). ¿Continuar?') }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="bloque">
+  <div class="bloque-cab"><h3>Sesiones recientes</h3></div>
+  <div class="tabla-scroll">
+  <table class="tabla-panel">
+    <thead><tr><th>Inicio</th><th>Última actividad</th><th>IP</th><th>Navegador</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for s in sesiones %}
+      <tr>
+        <td>{{ s.inicio | hora_local('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ s.ultima | hora_local('%d/%m/%Y %H:%M') }}</td>
+        <td>{{ s.ip }}</td>
+        <td title="{{ s.navegador }}">{{ s.navegador | navegador_corto }}</td>
+        <td>{% if s.sid in activas %}<span class="etiqueta-estado e-ok">Conectado</span>
+            {% elif not s.cerrada %}<span class="etiqueta-estado e-neutro">Caducada</span>
+            {% else %}<span class="etiqueta-estado e-neutro">{{ MOTIVOS_CIERRE.get(s.motivo_cierre, s.motivo_cierre) }}</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="vacio-tabla">Sin sesiones.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="dos">
+  <div class="bloque">
+    <div class="bloque-cab"><h3>Últimas conexiones</h3><a class="hint" href="{{ url_for('panel.conexiones', usuario=u.usuario) }}">Ver todas</a></div>
+    {{ tabla_conexiones(conexiones, con_usuario=False) }}
+  </div>
+  <div class="bloque">
+    <div class="bloque-cab"><h3>Última actividad</h3><a class="hint" href="{{ url_for('panel.auditoria', usuario=u.usuario) }}">Ver toda</a></div>
+    <div class="tabla-scroll">
+    <table class="tabla-panel">
+      <thead><tr><th>Fecha</th><th>Acción</th><th>Sobre</th></tr></thead>
+      <tbody>
+      {% for a in acciones %}
+        <tr><td>{{ a.fecha | hora_local('%d/%m %H:%M') }}</td><td><code>{{ a.accion }}</code></td><td class="detalle">{{ a.objeto or '' }}</td></tr>
+      {% else %}
+        <tr><td colspan="3" class="vacio-tabla">Sin actividad registrada.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
