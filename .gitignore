@@ -1,11 +1,11 @@
+DATOS/
+TRABAJOS/
+
 *.csv
 *.xlsx
-*.pdf
-*.png
-*.jpg
-*.txt
-*.pkl
 *.npy
+*.parquet
+*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -73,6 +73,15 @@ db.sqlite3-journal
 # Flask stuff:
 instance/
 .webassets-cache
+
+#
+admins.json
+instance/
+__pycache__/
+admins.json.importado
+*.db
+*.db-wal
+*.db-shm
 
 # Scrapy stuff:
 .scrapy
