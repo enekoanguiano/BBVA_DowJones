@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acceso · Simulador de carteras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pagina-login">
+  <section class="login-marca">
+    <div class="logo" aria-hidden="true"><span></span><span></span><span></span></div>
+    <h1>Simulador de carteras</h1>
+    <p>Proyecciones Monte Carlo y redes recurrentes sobre 26 valores del Dow Jones.</p>
+  </section>
+
+  <section class="login-form">
+    <form method="post" autocomplete="off" novalidate>
+      <h2>Acceso</h2>
+      <p class="hint">Entra con el usuario que te ha dado el administrador.</p>
+      {% if error %}<div class="aviso-error" role="alert">{{ error }}</div>{% endif %}
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <label for="usuario">Usuario</label>
+      <input id="usuario" name="usuario" value="{{ usuario }}" autocomplete="off" required autofocus>
+      <label for="clave">Contraseña</label>
+      <div class="campo-clave">
+        <input id="clave" name="clave" type="password" autocomplete="off" required>
+        <button type="button" class="ver-clave" aria-label="Mostrar contraseña"
+          onclick="const c=document.getElementById('clave');c.type=c.type==='password'?'text':'password';this.textContent=c.type==='password'?'Mostrar':'Ocultar'">Mostrar</button>
+      </div>
+      <button class="btn-principal" type="submit">Entrar</button>
+    </form>
+  </section>
+</body>
+</html>
