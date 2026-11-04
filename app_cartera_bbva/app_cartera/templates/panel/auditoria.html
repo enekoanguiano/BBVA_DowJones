@@ -1,0 +1,43 @@
+{% extends "panel/base.html" %}
+{% from "panel/_macros.html" import paginacion with context %}
+{% block titulo %}Auditoría{% endblock %}
+{% block contenido %}
+<h1>Auditoría</h1>
+<p class="hint">Qué ha hecho cada usuario: simulaciones, cambios de usuarios, exportaciones y accesos denegados.</p>
+
+<form class="filtros" method="get">
+  <label>Usuario<input name="usuario" value="{{ f.usuario }}" placeholder="Exacto"></label>
+  <label>Acción
+    <select name="accion">
+      <option value="">Todas</option>
+      {% for a in acciones %}<option {{ 'selected' if a == f.accion }}>{{ a }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn-accion" type="submit">Filtrar</button>
+  <button class="btn-sec" type="submit" name="formato" value="csv">Exportar CSV</button>
+  {% if f.usuario or f.accion %}<a class="hint" href="{{ url_for('panel.auditoria') }}">Quitar filtros</a>{% endif %}
+</form>
+
+<div class="bloque">
+<div class="tabla-scroll">
+<table class="tabla-panel">
+  <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Acción</th><th>Sobre</th><th>Detalle</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for a in filas %}
+    <tr class="{{ 'fallo' if a.accion == 'acceso_denegado' }}">
+      <td>{{ a.fecha | hora_local }}</td>
+      <td>{% if a.usuario %}<a href="{{ url_for('panel.auditoria', usuario=a.usuario) }}">{{ a.usuario }}</a>{% else %}—{% endif %}</td>
+      <td><code>{{ a.accion }}</code></td>
+      <td class="detalle">{{ a.objeto or '' }}</td>
+      <td class="detalle">{{ a.detalle or '' }}</td>
+      <td>{{ a.ip }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="vacio-tabla">No hay registros.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ paginacion(pag, 'panel.auditoria', request.args) }}
+</div>
+{% endblock %}
