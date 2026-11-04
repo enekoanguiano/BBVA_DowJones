@@ -3,6 +3,9 @@ TRABAJOS/
 
 *.csv
 *.xlsx
+*.npy
+*.parquet
+
 *.pdf
 *.png
 *.jpg
