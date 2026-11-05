@@ -20,8 +20,14 @@ from motor.redes import GestorRedes
 from motor.simulacion import calibrar, frontera, historico_cartera, simular_cartera
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.environ.get("DATA_PATH", os.path.join(BASE, "datos", "df_diario.parquet"))
-MODELOS_DIR = os.environ.get("MODELOS_DIR", os.path.join(BASE, "modelos"))
+DATA_PATH = os.environ.get(
+    "DATA_PATH",
+    os.path.join(BASE, "..", "..", "DATOS", "TRANSFORMADOS", "df_diario.parquet")
+)
+MODELOS_DIR = os.environ.get(
+    "MODELOS_DIR",
+    os.path.join(BASE, "..", "..", "DATOS", "MODELOS")
+)
 
 MAX_SIMS = 50_000
 MAX_CARTERAS = 4

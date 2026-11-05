@@ -30,7 +30,10 @@ def main(ruta_npy):
     n_tr = int(.70 * len(X))
     m, s = X[:n_tr].mean((0, 1)), X[:n_tr].std((0, 1))
     ys = y[:n_tr].std()
-    destino = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modelos", "normalizacion.json")
+    destino = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+        "..", "..", "DATOS", "MODELOS", "normalizacion.json"
+    )
     with open(destino, "w") as f:
         json.dump({"m": m.tolist(), "s": s.tolist(), "ys": float(ys),
                    "origen": os.path.abspath(ruta_npy)}, f, indent=2)
@@ -39,4 +42,7 @@ def main(ruta_npy):
 
 if __name__ == "__main__":
     main(sys.argv[1] if len(sys.argv) > 1 else
-         os.path.join("..", "DATOS", "TRANSFORMADOS", "datos_sinteticos.npy"))
+         os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "..", "DATOS", "TRANSFORMADOS", "datos_sinteticos.npy"
+        ))
