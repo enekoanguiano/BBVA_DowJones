@@ -14,6 +14,7 @@ import os
 import pickle
 import zipfile
 from collections import OrderedDict
+import torch
 
 import numpy as np
 
@@ -141,56 +142,174 @@ def features(X_ratio):
     return np.diff(np.log(X_ratio), axis=1, prepend=0.0)
 
 
+class ModeloTorch(torch.nn.Module):
+
+    def __init__(self, cfg, input_dim):
+        super().__init__()
+
+        tipo = cfg["tipo"]
+        units = cfg["units"]
+        capas = cfg["capas"]
+        bi = cfg.get("bi", False)
+        dropout = cfg.get("dropout", 0.05)
+
+        if tipo == "mlp":
+
+            capas_red = [
+                torch.nn.Flatten(),
+                torch.nn.Linear(input_dim, units),
+                torch.nn.ReLU(),
+                torch.nn.Dropout(dropout)
+            ]
+
+            for _ in range(capas - 1):
+                capas_red += [
+                    torch.nn.Linear(units, units),
+                    torch.nn.ReLU(),
+                    torch.nn.Dropout(dropout)
+                ]
+
+            capas_red.append(torch.nn.Linear(units, 1))
+
+            self.net = torch.nn.Sequential(*capas_red)
+
+        else:
+
+            Cell = {
+                "rnn": torch.nn.RNN,
+                "gru": torch.nn.GRU,
+                "lstm": torch.nn.LSTM
+            }[tipo]
+
+            self.rnn = Cell(
+                input_size=3,
+                hidden_size=units,
+                num_layers=capas,
+                batch_first=True,
+                bidirectional=bi,
+                dropout=dropout if capas > 1 else 0.0
+            )
+
+            self.bi = bi
+            self.dropout = torch.nn.Dropout(dropout)
+
+            self.out = torch.nn.Linear(
+                units * (2 if bi else 1),
+                1
+            )
+
+    def forward(self, x):
+
+        if hasattr(self, "net"):
+            return self.net(x).squeeze(-1)
+
+        _, h = self.rnn(x)
+
+        if isinstance(h, tuple):
+            h = h[0]
+
+        if self.bi:
+            h = torch.cat([h[-2], h[-1]], dim=1)
+        else:
+            h = h[-1]
+
+        return self.out(self.dropout(h)).squeeze(-1)
+
 class GestorRedes:
-    """Carga los tres modelos y la normalización usada en el entrenamiento."""
 
     def __init__(self, carpeta):
+
         self.carpeta = carpeta
         self.modelos = {}
-        for c in CELDAS:
-            ruta = os.path.join(carpeta, f"best_model_{c}.pt")
-            if os.path.exists(ruta):
-                self.modelos[c] = RedRecurrente(c, cargar_state_dict(ruta))
         self.norm = None
-        ruta_norm = os.path.join(carpeta, "normalizacion.json")
-        if os.path.exists(ruta_norm):
-            with open(ruta_norm) as f:
-                d = json.load(f)
-            self.norm = {"m": np.array(d["m"]), "s": np.array(d["s"]), "ys": float(d["ys"])}
+
+        ruta = os.path.join(carpeta, "modelo_final.pt")
+
+        if not os.path.isfile(ruta):
+            raise FileNotFoundError(
+                f"No se encuentra el modelo: {ruta}"
+            )
+
+        checkpoint = torch.load(
+            ruta,
+            map_location="cpu",
+            weights_only=False
+        )
+
+        cfg = checkpoint["config"]
+        nombre = checkpoint["modelo_nombre"]
+
+        modelo = ModeloTorch(
+            cfg,
+            checkpoint["input_dim"]
+        )
+
+        modelo.load_state_dict(
+            checkpoint["model_state_dict"]
+        )
+
+        modelo.eval()
+
+        # Número de parámetros
+        modelo.n_params = sum(
+            p.numel() for p in modelo.parameters()
+        )
+
+        self.modelos[nombre] = modelo
+
+        # Normalización del entrenamiento
+        self.norm = {
+            "m": np.asarray(checkpoint["media_X"], dtype=float),
+            "s": np.asarray(checkpoint["std_X"], dtype=float),
+            "ys": float(checkpoint["std_y"])
+        }
+
+        # Comprobar dimensiones
+        self.num_pasos = checkpoint["num_pasos"]
+
+        print(f"Modelo cargado: {nombre}")
+        print(f"Arquitectura: {cfg}")
+        print(f"Ruta: {ruta}")
 
     @property
     def disponibles(self):
         return list(self.modelos)
 
     def predecir(self, X_ratio, calib_frac=0.2, rng=None):
-        """
-        Devuelve {celda: payoff_predicho} y el modo de normalización usado.
 
-        - Con normalizacion.json (m, s, ys exactos del entrenamiento) la predicción
-          es directa.
-        - Sin él, se estandariza con las estadísticas de las propias simulaciones y
-          la escala del payoff (ys) se ajusta por mínimos cuadrados sobre una
-          fracción de calibración de las trayectorias. Esa fracción se excluye
-          al medir el error.
-        """
         X = features(X_ratio)
-        n = len(X)
-        out = {}
-        if self.norm is not None:
-            Xs = (X - self.norm["m"]) / self.norm["s"]
-            for c, mdl in self.modelos.items():
-                out[c] = np.maximum(mdl(Xs) * self.norm["ys"], 0.0)
-            return out, {"modo": "exacta", "eval_idx": np.arange(n)}
 
-        rng = rng or np.random.default_rng(0)
-        perm = rng.permutation(n)
-        n_cal = max(200, int(calib_frac * n))
-        cal, ev = perm[:n_cal], perm[n_cal:]
-        m, s = X.mean((0, 1)), X.std((0, 1))
-        Xs = (X - m) / s
-        y_cal = payoff(X_ratio[cal])
-        for c, mdl in self.modelos.items():
-            raw = mdl(Xs)
-            ys = float(raw[cal] @ y_cal / max(raw[cal] @ raw[cal], 1e-12))
-            out[c] = np.maximum(raw * ys, 0.0)
-        return out, {"modo": "calibrada", "eval_idx": ev}
+        if X.shape[1] != self.num_pasos:
+            raise ValueError(
+                f"Se esperaban {self.num_pasos} pasos "
+                f"y se recibieron {X.shape[1]}"
+            )
+
+        Xs = (
+            X - self.norm["m"]
+        ) / self.norm["s"]
+
+        X_tensor = torch.tensor(
+            Xs,
+            dtype=torch.float32
+        )
+
+        resultados = {}
+
+        with torch.no_grad():
+
+            for nombre, modelo in self.modelos.items():
+
+                pred = modelo(X_tensor).cpu().numpy()
+
+                pred = pred * self.norm["ys"]
+
+                resultados[nombre] = np.maximum(
+                    pred,
+                    0.0
+                )
+
+        return resultados, {
+            "modo": "exacta",
+            "eval_idx": np.arange(len(X))
+        }
