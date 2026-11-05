@@ -28,10 +28,10 @@ MAX_CARTERAS = 4
 
 app = Flask(__name__)
 app.config.update(
-    SECRET_KEY=clave_secreta(os.path.join(BASE, "instance")),
+    SECRET_KEY="equipomorado",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SEGURA") == "1",  # actívalo si sirves por HTTPS
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SEGURA") == "1",
 )
 if os.environ.get("DETRAS_DE_PROXY") == "1":
     # Detrás de Nginx u otro proxy: registrar la IP real del usuario (cabecera X-Forwarded-For)
