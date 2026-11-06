@@ -1,7 +1,0 @@
-flask>=3.0
-numpy>=1.24
-pandas>=2.0
-pyarrow>=14      # para leer df_diario.parquet
-# Opcionales:
-# torch          # solo para exportar_normalizacion.py (la app infiere en NumPy)
-# scipy          # solo para exportar_normalizacion.py
