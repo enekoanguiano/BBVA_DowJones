@@ -1,0 +1,2 @@
+conda env create -f R9_MORADO_ENTORNO.yml
+conda activate R9_M
