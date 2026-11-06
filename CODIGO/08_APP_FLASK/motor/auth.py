@@ -178,6 +178,24 @@ class Seguridad:
                           (u, d["hash"], "admin", ahora(), "importado de admins.json"))
         os.replace(ruta, ruta + ".importado")
 
+    def crear_admin_inicial(self):
+        """Crea admin/admin solo si la base no tiene usuarios (instalación de prueba).
+
+        La contraseña es provisional y debe cambiarse en el primer acceso.
+        No recrea ni restablece la cuenta en arranques posteriores.
+        """
+        with self._con() as c:
+            if c.execute("SELECT 1 FROM usuarios LIMIT 1").fetchone():
+                return False
+            c.execute(
+                """INSERT INTO usuarios
+                   (usuario, hash, rol, debe_cambiar, creado, creado_por)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                ("admin", generate_password_hash("admin"), "admin", 1,
+                 ahora(), "instalacion_inicial")
+            )
+        return True
+
     # ------------------------------------------------------------ usuarios
     def hay_admins(self):
         with self._con() as c:

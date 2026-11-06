@@ -11,6 +11,7 @@ import os
 
 import numpy as np
 from flask import Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from motor.auth import (ROLES, Seguridad, a_hora_local, auditar, clave_secreta, csrf_valido,
                         iniciar_sesion, ip_cliente, navegador, problemas_clave, proteger, token_csrf)
@@ -20,13 +21,31 @@ from motor.redes import GestorRedes
 from motor.simulacion import calibrar, frontera, historico_cartera, simular_cartera
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+
+# Carpeta principal del repositorio
+REPOSITORIO = os.path.abspath(
+    os.path.join(BASE, "..", "..")
+)
+
+# Archivo de precios históricos
 DATA_PATH = os.environ.get(
     "DATA_PATH",
-    os.path.join(BASE, "..", "..", "DATOS", "TRANSFORMADOS", "df_diario.parquet")
+    os.path.join(
+        REPOSITORIO,
+        "DATOS",
+        "TRANSFORMADOS",
+        "df_diario.parquet"
+    )
 )
+
+# Carpeta de modelos entrenados
 MODELOS_DIR = os.environ.get(
     "MODELOS_DIR",
-    os.path.join(BASE, "..", "..", "DATOS", "MODELOS")
+    os.path.join(
+        REPOSITORIO,
+        "DATOS",
+        "MODELOS"
+    )
 )
 
 MAX_SIMS = 50_000
@@ -34,10 +53,10 @@ MAX_CARTERAS = 4
 
 app = Flask(__name__)
 app.config.update(
-    SECRET_KEY="equipomorado",
+    SECRET_KEY=clave_secreta(os.path.join(BASE, "instance")),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SEGURA") == "1",
+    SESSION_COOKIE_SECURE=False,  # actívalo si sirves por HTTPS
 )
 if os.environ.get("DETRAS_DE_PROXY") == "1":
     # Detrás de Nginx u otro proxy: registrar la IP real del usuario (cabecera X-Forwarded-For)
@@ -45,6 +64,11 @@ if os.environ.get("DETRAS_DE_PROXY") == "1":
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 SEG = Seguridad(os.environ.get("SEGURIDAD_DB", os.path.join(BASE, "instance", "seguridad.db")),
                 ruta_json_antiguo=os.path.join(BASE, "admins.json"))  # se importa una sola vez si existe
+# Cuenta inicial exclusivamente para una instalación de pruebas vacía.
+# En el primer acceso se exigirá sustituir la contraseña provisional.
+if SEG.crear_admin_inicial():
+    print("AVISO: administrador inicial creado (admin / admin). "
+          "Cambia esta contraseña al iniciar sesión y no publiques la app así.")
 proteger(app, SEG)
 app.add_template_filter(a_hora_local, "hora_local")
 
@@ -104,10 +128,30 @@ def _pesos(pesos, n):
     return w / w.sum()  # se normalizan a 100 %
 
 
+# Token firmado para el acceso: no necesita una cookie de sesion previa.
+# El resto de formularios mantiene la comprobacion CSRF basada en sesion.
+def _firma_csrf_login():
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"], salt="login-csrf-v1")
+
+
+def token_csrf_login():
+    return _firma_csrf_login().dumps("login")
+
+
+def csrf_login_valido(token):
+    if not token:
+        return False
+    try:
+        return _firma_csrf_login().loads(token, max_age=30 * 60) == "login"
+    except (BadSignature, SignatureExpired):
+        return False
+
+
 @app.context_processor
 def _plantillas():
     u = g.get("usuario")
-    return {"csrf_token": token_csrf, "usuario_actual": u["usuario"] if u else None,
+    return {"csrf_token": token_csrf, "csrf_token_login": token_csrf_login,
+            "usuario_actual": u["usuario"] if u else None,
             "es_admin": bool(u and u["rol"] == "admin"), "ROLES": ROLES}
 
 
@@ -134,7 +178,7 @@ def login():
         usuario = (request.form.get("usuario") or "").strip().lower()
         ip = ip_cliente()
         espera = SEG.bloqueado(ip, usuario)
-        if not csrf_valido(request.form.get("csrf")):
+        if not csrf_login_valido(request.form.get("csrf")):
             error = "La sesión del formulario ha caducado. Inténtalo de nuevo."
         elif espera:
             SEG.registrar_conexion(usuario[:40], ip, navegador(), False, "demasiados_intentos")
