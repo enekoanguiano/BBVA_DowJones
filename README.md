@@ -117,6 +117,17 @@ User and session data are stored in `CODIGO/08_APP_FLASK/instance/seguridad.db`,
 - `DATOS/GRAFICOS/`: figures exported by the notebooks, including portfolio, financial analysis, neural network and time-series charts.
 - `DATOS/MODELOS/`: trained models in `.pt` format.
 
+## Authors
+
+This project was developed as a team (Purple Team) within the Business Data Analytics degree at Mondragon Unibertsitatea, 2026-2027:
+
+- Eneko Anguiano
+- Naia Parte
+- Aimar Querejazu
+- Ander Okina
+- Markel Oregi
+- Aiala Etxebarrieta
+
 ---
 
 ## Versión en español
@@ -233,4 +244,15 @@ Los datos de usuarios y sesiones se almacenan en `CODIGO/08_APP_FLASK/instance/s
 - `DATOS/TRANSFORMADOS/`: serie diaria, datos sintéticos y tablas de análisis.
 - `DATOS/GRAFICOS/`: figuras exportadas por los notebooks, incluidas las de cartera, análisis financiero, redes neuronales y series temporales.
 - `DATOS/MODELOS/`: modelos entrenados en formato `.pt`.
+
+## Autores
+
+Este proyecto se desarrolló en equipo (Equipo Morado) dentro del Grado en Business Data Analytics de Mondragon Unibertsitatea, curso 2026-2027:
+
+- Eneko Anguiano
+- Naia Parte
+- Aimar Querejazu
+- Ander Okina
+- Markel Oregi
+- Aiala Etxebarrieta
 
