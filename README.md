@@ -1,5 +1,126 @@
 # 26-27_3_R9_EQUIPO_MORADO
 
+*Versión en español: [más abajo](#versión-en-español)*
+
+Financial analysis project covering portfolio construction and the valuation of a geometric Asian option on Dow Jones stocks. The work is developed in Python notebooks and completed with a Flask web application to simulate portfolios, explore an efficient frontier and compare valuation methods.
+
+## Project overview
+
+The analysis starts from historical market files, which are cleaned and transformed into a daily series. From that data, return and risk are studied, combinations of assets are compared and Monte Carlo simulations are run. The derivatives part simulates the option with Monte Carlo and trains neural networks to approximate the *payoff* of a geometric Asian option. Time series of the selected assets are also analysed.
+
+| File | Content |
+| --- | --- |
+| [`01_LIMPIEZA.ipynb`](CODIGO/01_LIMPIEZA.ipynb) | Import of market CSV files, filtering of trading sessions and preparation of the daily dataset. |
+| [`02_CARTERA.ipynb`](CODIGO/02_CARTERA.ipynb) | Comparison of asset combinations, correlations, Sharpe ratio and efficient frontier. |
+| [`03_FINANZAS.ipynb`](CODIGO/03_FINANZAS.ipynb) | Returns, volatility, Sharpe, Sortino, drawdown, correlations, and quantitative and qualitative analysis. |
+| [`04_MONTE_CARLO.ipynb`](CODIGO/04_MONTE_CARLO.ipynb) | Generation of simulated paths, geometric Brownian motion and payoff calculation. |
+| [`05_VALORACION_OPCION.ipynb`](CODIGO/05_VALORACION_OPCION.ipynb) | Valuation of a geometric Asian option by Monte Carlo; generation of synthetic data. |
+| [`06_RED_NEURONAL.ipynb`](CODIGO/06_RED_NEURONAL.ipynb) | Comparison of MLP, RNN, GRU and LSTM; metrics, cross-validation and saving of PyTorch models. |
+| [`07_SERIES_TEMPORALES.ipynb`](CODIGO/07_SERIES_TEMPORALES.ipynb) | Processing and analysis of the time series of CAT, GS and MSFT. |
+| [`08_APP_FLASK/`](CODIGO/08_APP_FLASK/) | Web application with portfolio simulation, option valuation and user management. |
+
+## Folder structure
+
+```text
+REPOSITORY/
+├── CODIGO/
+│   ├── 01_LIMPIEZA.ipynb
+│   ├── 02_CARTERA.ipynb
+│   ├── 03_FINANZAS.ipynb
+│   ├── 04_MONTE_CARLO.ipynb
+│   ├── 05_VALORACION_OPCION.ipynb
+│   ├── 06_RED_NEURONAL.ipynb
+│   ├── 07_SERIES_TEMPORALES.ipynb
+│   └── 08_APP_FLASK/
+│       ├── app.py
+│       ├── gestionar_admins.py
+│       ├── motor/
+│       ├── static/
+│       └── templates/
+├── DATOS/
+│   ├── ORIGINALES/
+│   ├── TRANSFORMADOS/
+│   │   ├── df_diario.parquet
+│   │   └── datos_sinteticos.npy
+│   ├── MODELOS/
+│   │   └── modelo_final.pt
+│   └── GRAFICOS/
+├── R9_MORADO_ENTORNO.yml
+└── README.md
+```
+
+Folder and file names are in Spanish: `CODIGO` = code, `DATOS` = data, `ORIGINALES` = original files, `TRANSFORMADOS` = transformed data, `MODELOS` = models, `GRAFICOS` = charts, `LIMPIEZA` = cleaning, `CARTERA` = portfolio, `FINANZAS` = finance, `VALORACION_OPCION` = option valuation, `RED_NEURONAL` = neural network, `SERIES_TEMPORALES` = time series.
+
+The `DATOS/` folder is created automatically when [`01_LIMPIEZA.ipynb`](CODIGO/01_LIMPIEZA.ipynb) is run. The first run will fail because the original data has not yet been placed in `DATOS/ORIGINALES/`: run it once, add the original data to that folder and run [`01_LIMPIEZA.ipynb`](CODIGO/01_LIMPIEZA.ipynb) again.
+
+## Virtual environment setup
+
+From **Anaconda Prompt**, at the root of the repository:
+
+```bat
+conda env create -f R9_MORADO_ENTORNO.yml
+conda activate R9_M
+```
+
+### Main dependencies
+
+The project uses NumPy, pandas, SciPy, Matplotlib, Seaborn, Plotly, scikit-learn, PyTorch, statsmodels, yfinance and Flask, among other libraries included in the environment file. Reading and writing Parquet requires an engine such as `pyarrow`; exporting Plotly charts to PNG uses Kaleido.
+
+## Preparing and running the notebooks
+
+1. Place the original CSV files in `DATOS/ORIGINALES/`. The cleaning notebook looks for files whose name ends in `_marketstack.csv`.
+2. Run `01_LIMPIEZA.ipynb` to generate `DATOS/TRANSFORMADOS/df_diario.parquet`.
+3. Run the portfolio and finance analyses (`02_CARTERA.ipynb` and `03_FINANZAS.ipynb`).
+4. Run `04_MONTE_CARLO.ipynb` to study the simulated paths. Its synthetic output is saved as `datos_sinteticos2.npy`.
+5. Run `05_VALORACION_OPCION.ipynb` to simulate the valuation and generate `DATOS/TRANSFORMADOS/datos_sinteticos.npy`.
+6. Run `06_RED_NEURONAL.ipynb` to train and evaluate the architectures. It generates tables and charts and saves `DATOS/MODELOS/modelo_final.pt`, along with other checkpoints.
+7. Run `07_SERIES_TEMPORALES.ipynb` for the time-series analysis of CAT, GS and MSFT.
+
+Some notebooks download external financial data while running. Results may vary depending on the query date, the available data and the simulation seeds.
+
+## Flask web application
+
+The application is in [`CODIGO/08_APP_FLASK`](CODIGO/08_APP_FLASK). It lets you define and compare portfolios, simulate scenarios with Monte Carlo, explore an efficient frontier and value an option on three assets. It includes user login, administrator and analyst roles, connection logging and an admin panel.
+
+**Before starting it**, the following files must exist:
+
+```text
+DATOS/TRANSFORMADOS/df_diario.parquet
+DATOS/MODELOS/modelo_final.pt
+```
+
+`app.py` builds the paths from the location of the script itself up to the `DATOS/` folder at the root of the repository. They can be overridden with the environment variables `DATA_PATH` and `MODELOS_DIR`.
+
+From Anaconda Prompt:
+
+```bat
+conda activate R9_M
+cd CODIGO\08_APP_FLASK
+python app.py
+```
+
+Open in your browser:
+
+**http://127.0.0.1:5000**
+
+To stop the server, press `Ctrl + C` in the terminal.
+
+### Initial access and security
+
+On an **empty database**, the code creates a provisional administrator with username `admin` and password `admin` and forces a password change at first login. **These credentials are intended for local testing only**; do not deploy the server with them or leave the account unchanged.
+
+User and session data are stored in `CODIGO/08_APP_FLASK/instance/seguridad.db`, and the session key in `instance/secret_key`.
+
+## Generated results
+
+- `DATOS/TRANSFORMADOS/`: daily series, synthetic data and analysis tables.
+- `DATOS/GRAFICOS/`: figures exported by the notebooks, including portfolio, financial analysis, neural network and time-series charts.
+- `DATOS/MODELOS/`: trained models in `.pt` format.
+
+---
+
+## Versión en español
+
 Proyecto de análisis financiero, construcción de carteras y valoración de una opción asiática geométrica sobre acciones del Dow Jones. El trabajo se desarrolla en notebooks de Python y se completa con una aplicación web en Flask para simular carteras, consultar una frontera eficiente y comparar métodos de valoración.
 
 ## Contenido del proyecto
